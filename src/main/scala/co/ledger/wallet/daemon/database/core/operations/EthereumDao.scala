@@ -53,7 +53,7 @@ class EthereumDao(protected val db: Database, protected val poolName: String) ex
         | AND ethop.transaction_uid = etx.transaction_uid
         | AND ercop.block_height >= '$blockHeight'
         | ORDER BY o.date ${order.value}
-        | OFFSET $offset LIMIT $limit"
+        | OFFSET $offset LIMIT $limit
         | """.stripMargin.replaceAll("\n", " ")
 
   private val ethOperationByErc20Uids: (Int, String, Ordering.OperationOrder, Option[Seq[ERC20OperationUid]], Int, Int) => SQLQuery =
