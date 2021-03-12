@@ -421,7 +421,10 @@ class AccountSynchronizer() extends Actor with ActorLogging {
   }
 
   private def tryToSync(account: Account, accountInfo: AccountInfo) = {
+    val accountUrl: String = s"${accountInfo.poolName}/${accountInfo.walletName}/${account.getIndex}"
+    log.debug(s"Trying to synchronize $accountUrl...")
     if (onGoingSyncs.size >= DaemonConfiguration.Synchronization.maxOnGoing) {
+      log.debug(s"Queued $accountUrl synchronization as ${onGoingSyncs.size} >= ${DaemonConfiguration.Synchronization.maxOnGoing}")
       queue += ((account, accountInfo))
     } else {
       startSync(account, accountInfo)
@@ -437,7 +440,7 @@ class AccountSynchronizer() extends Actor with ActorLogging {
     import co.ledger.wallet.daemon.context.ApplicationContext.IOPool
     val accountUrl: String = s"${accountInfo.poolName}/${accountInfo.walletName}/${account.getIndex}"
 
-    log.info(s"[${self.path}]#Sync : start syncing $accountInfo")
+    log.info(s"[${self.path}]#Sync : start syncing $accountUrl")
     account.sync(accountInfo.poolName, accountInfo.walletName)(IOPool)
       .map { result =>
         if (result.syncResult) {
