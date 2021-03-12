@@ -13,6 +13,7 @@ import scala.jdk.CollectionConverters.collectionAsScalaIterableConverter
 import scala.util.{Failure, Success, Try}
 
 case class RedisClientConfiguration(
+                                     dbPrefix: String,
                                      poolName: String,
                                      host: String = "localhost",
                                      port: Int = 6379,
@@ -20,7 +21,7 @@ case class RedisClientConfiguration(
                                      db: Option[Int] = None,
                                      connectionTimeout: Option[Int] = Some(10)
                                    ) {
-  val prefix: String = "core:user-preferences:" ++ poolName ++ ":"
+  val prefix: String = s"core:user-preferences:$dbPrefix:$poolName:"
 }
 
 class RedisPreferenceBackend(conf: RedisClientConfiguration) extends PreferencesBackend with Logging {
