@@ -7,7 +7,6 @@ import co.ledger.wallet.daemon.database.core.Database.SQLQuery
 import co.ledger.wallet.daemon.database.core.Decoder._
 import co.ledger.wallet.daemon.database.core.{Database, Ordering, PartialEthOperation}
 import co.ledger.wallet.daemon.models.Operations.OperationView
-import co.ledger.wallet.daemon.models.coins.Bitcoin.currencyFamily
 import co.ledger.wallet.daemon.models.coins.EthereumTransactionView.ERC20
 import co.ledger.wallet.daemon.models.coins.{CommonBlockView, EthereumTransactionView}
 import com.twitter.finagle.postgres.Row
@@ -274,7 +273,7 @@ class EthereumDao(protected val db: Database, protected val poolName: String) ex
     val ethSender = toEIP55Address(row.get[String]("senders"), w.getCurrency)
     val ethReceipient = toEIP55Address(row.get[String]("recipients"), w.getCurrency)
     val amount = BigInt(row.get[String]("amount"), 16)
-    OperationView(ethOpUid, w.getCurrency.getName, currencyFamily, None,
+    OperationView(ethOpUid, w.getCurrency.getName, w.getWalletType, None,
       BigInt(row.get[String]("confirmations")).longValue(),
       operationDate,
       row.getOption[Long]("block_height"),
