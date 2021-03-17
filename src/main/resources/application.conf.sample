@@ -511,7 +511,7 @@ akka {
       throughput = 1
     }
     loggers = ["akka.event.slf4j.Slf4jLogger"]
-    loglevel = "INFO"
+    loglevel = "DEBUG"
     logging-filter = "akka.event.slf4j.Slf4jLoggingFilter"
     actor.debug.receive = on
 }

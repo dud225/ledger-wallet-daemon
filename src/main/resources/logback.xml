@@ -55,8 +55,11 @@
     <root level="${LOG_LEVEL}">
         <appender-ref ref="ASYNC" />
     </root>
-    <logger name="co.ledger.wallet.daemon.services.AccountSynchronizer" level="${SYNCHRONIZER_LOG_LEVEL}" />
-    <logger name="akka.event.slf4j.Slf4jLogger" level="${SYNCHRONIZER_LOG_LEVEL}" />
-    <logger name="co.ledger.wallet.daemon.services.AccountOperationsPublisher" level="${PUBLISHER_LOG_LEVEL}" />
+    <logger name="co.ledger.wallet.daemon.services.AccountSynchronizer" level="${SYNCHRONIZER_LOG_LEVEL}" >
+        <appender-ref ref="ASYNC" />
+    </logger>
+    <logger name="co.ledger.wallet.daemon.services.AccountOperationsPublisher" level="${PUBLISHER_LOG_LEVEL}" >
+        <appender-ref ref="ASYNC" />
+    </logger>
 
 </configuration>

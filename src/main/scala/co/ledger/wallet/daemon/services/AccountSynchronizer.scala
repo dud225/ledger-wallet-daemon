@@ -428,6 +428,10 @@ class AccountSynchronizer() extends Actor with ActorLogging {
     log.debug(s"Trying to synchronize $accountUrl...")
     if (onGoingSyncs.size >= DaemonConfiguration.Synchronization.maxOnGoing) {
       log.debug(s"Queued $accountUrl synchronization as OnGoing[${onGoingSyncs.size}] >= Max[${DaemonConfiguration.Synchronization.maxOnGoing}]")
+      log.debug(s"=> [${
+        queue.map { case (acc, info) => s"${info.poolName}/${info.walletName}/${acc.getIndex}" }
+          .mkString(",")
+      }]")
 
       queue += ((account, accountInfo))
     } else {
