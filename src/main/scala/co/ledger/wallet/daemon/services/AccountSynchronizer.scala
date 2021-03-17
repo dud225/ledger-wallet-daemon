@@ -30,8 +30,8 @@ import scala.collection.mutable
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future, Promise}
 import scala.language.postfixOps
-import scala.util.Success
 import scala.util.control.NonFatal
+import scala.util.{Random, Success}
 
 /**
   * This module is responsible to maintain account updated
@@ -427,7 +427,8 @@ class AccountSynchronizer() extends Actor with ActorLogging {
     val accountUrl: String = s"${accountInfo.poolName}/${accountInfo.walletName}/${account.getIndex}"
     log.debug(s"Trying to synchronize $accountUrl...")
     if (onGoingSyncs.size >= DaemonConfiguration.Synchronization.maxOnGoing) {
-      log.debug(s"Queued $accountUrl synchronization as ${onGoingSyncs.size} >= ${DaemonConfiguration.Synchronization.maxOnGoing}")
+      log.debug(s"Queued $accountUrl synchronization as OnGoing[${onGoingSyncs.size}] >= Max[${DaemonConfiguration.Synchronization.maxOnGoing}]")
+
       queue += ((account, accountInfo))
     } else {
       startSync(account, accountInfo, wasForced = false)
@@ -435,7 +436,7 @@ class AccountSynchronizer() extends Actor with ActorLogging {
   }
 
   private def startSync(account: Account, accountInfo: AccountInfo, wasForced: Boolean): Unit = {
-    onGoingSyncs += (accountInfo -> sync(account, accountInfo, wasForced))
+    onGoingSyncs += (accountInfo -> sync(account, accountInfo, wasForced).pipeTo(self))
     watchdog ! SyncStarted(accountInfo)
   }
 
@@ -451,20 +452,21 @@ class AccountSynchronizer() extends Actor with ActorLogging {
   private def sync(account: Account, accountInfo: AccountInfo, wasForced: Boolean): Future[SyncResult] = {
     import co.ledger.wallet.daemon.context.ApplicationContext.IOPool
     val accountUrl: String = s"${accountInfo.poolName}/${accountInfo.walletName}/${account.getIndex}"
+    val id = Random.nextString(10)
 
-    log.info(s"[${self.path}]#Sync : start syncing $accountUrl")
+    log.info(s"[$id]#Sync : start syncing $accountUrl")
     account.sync(accountInfo.poolName, accountInfo.walletName)(IOPool)
       .map { result =>
         if (result.syncResult) {
-          log.info(s"#[${self.path}]Sync : $accountUrl has been synced : $result")
+          log.info(s"[$id]#Sync : $accountUrl has been synced : $result")
           SyncSuccess(accountInfo, wasForced)
         } else {
-          log.error(s"#Sync : $accountUrl has FAILED")
-          SyncFailure(accountInfo, s"#Sync : Lib core failed to sync the account $accountUrl", wasForced)
+          log.error(s"[$id]#Sync : $accountUrl has FAILED")
+          SyncFailure(accountInfo, s"[$id]#Sync : Lib core failed to sync the account $accountUrl", wasForced)
         }
       }(IOPool)
       .recoverWith { case NonFatal(t) =>
-        log.error(t, s"#Sync Failed to sync account: $accountUrl")
+        log.error(t, s"[$id]#Sync Failed to sync account: $accountUrl")
         Future.successful(SyncFailure(accountInfo, t.getMessage, wasForced))
       }(IOPool)
   }
