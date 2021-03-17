@@ -199,10 +199,10 @@ class AccountSynchronizerWatchdog(
     // AccountSynchronizer messages
     case SyncStarted(accountInfo) =>
       handleSyncStarted(accountInfo)
-    case SyncSuccess(accountInfo) =>
-      handleSyncSuccess(accountInfo)
-    case SyncFailure(accountInfo, reason) =>
-      handleSyncFailure(accountInfo, reason)
+    case SyncSuccess(accountInfo, wasForced) =>
+      handleSyncSuccess(accountInfo, wasForced)
+    case SyncFailure(accountInfo, reason, wasForced) =>
+      handleSyncFailure(accountInfo, reason, wasForced)
   }
 
   private def resyncAccount(accountInfo: AccountInfo): Unit = {
@@ -271,26 +271,26 @@ class AccountSynchronizerWatchdog(
     accounts += ((accountInfo, accounts(accountInfo).copy(syncStatus = syncing)))
   }
 
-  private def handleSyncFailure(accountInfo: AccountInfo, reason: String) = {
+  private def handleSyncFailure(accountInfo: AccountInfo, reason: String, wasForced: Boolean) = {
     val accountData = accounts(accountInfo)
 
     log.warning(s"Failed to sync account $accountInfo: $reason. Re-scheduled.")
-    afterSyncEpilogue(accountInfo, accountData, FailedToSync(reason))
+    afterSyncEpilogue(accountInfo, accountData, FailedToSync(reason), wasForced)
   }
 
-  private def handleSyncSuccess(accountInfo: AccountInfo): Unit = {
+  private def handleSyncSuccess(accountInfo: AccountInfo, wasForced: Boolean): Unit = {
     val accountData = accounts(accountInfo)
 
     lastAccountBlockHeight(accountData.account).andThen {
       case Success(blockHeight) =>
-        afterSyncEpilogue(accountInfo, accountData, Synced(blockHeight.value))
+        afterSyncEpilogue(accountInfo, accountData, Synced(blockHeight.value), wasForced)
       case scala.util.Failure(e) =>
         log.warning(s"Could not update status of account $accountInfo although the synchronization ended well. Still marked as fail.")
-        afterSyncEpilogue(accountInfo, accountData, FailedToSync(e.getMessage))
+        afterSyncEpilogue(accountInfo, accountData, FailedToSync(e.getMessage), wasForced)
     }
   }
 
-  private def afterSyncEpilogue(accountInfo: AccountInfo, accountData: AccountData, newSyncStatus: SyncStatus) = {
+  private def afterSyncEpilogue(accountInfo: AccountInfo, accountData: AccountData, newSyncStatus: SyncStatus, wasForced: Boolean) = {
     accounts += (accountInfo -> accountData.copy(syncStatus = newSyncStatus))
     ongoingForceSyncs.remove(accountInfo).foreach(p => {
       p.success(newSyncStatus)
@@ -298,8 +298,10 @@ class AccountSynchronizerWatchdog(
     accountData.publisher ! newSyncStatus
     log.debug(s"New status for account $accountInfo: ${accounts(accountInfo).syncStatus}")
 
-    scheduler.doLater(Duration.fromSeconds(DaemonConfiguration.Synchronization.syncInterval)) {
-      synchronizer ! StartSynchronization(accountData.account, accountInfo)
+    if (!wasForced) {
+      scheduler.doLater(Duration.fromSeconds(DaemonConfiguration.Synchronization.syncInterval)) {
+        synchronizer ! StartSynchronization(accountData.account, accountInfo)
+      }
     }
   }
 
@@ -400,24 +402,25 @@ class AccountSynchronizer() extends Actor with ActorLogging {
     case ForceStopSynchronization(accountInfo) =>
       forceStopSynchronization(accountInfo)
     case ForceStartSynchronization(account, accountInfo) =>
-      startSync(account, accountInfo)
+      forceStartSync(account, accountInfo)
     case StartSynchronization(account, accountInfo) =>
       tryToSync(account, accountInfo)
     // Self messages
     case result: SyncResult =>
-      watchdog ! result
-      onGoingSyncs.remove(result.accountInfo)
-      if (queue.nonEmpty) {
-        val (account, accountInfo) = queue.dequeue()
-        self ! StartSynchronization(account, accountInfo)
-      }
+      handleSyncResult(result)
   }
 
-  def forceStopSynchronization(accountInfo: AccountInfo): Unit = {
+  private def forceStopSynchronization(accountInfo: AccountInfo): Unit = {
     // The future API does not provide a cancel concept (unlike java), so we just remove the reference to the future
     // Maybe we could use: https://pdf.zlibcdn.com/dtoken/d4e0004fdeacbefd04a0021668c6103d/Learning_Concurrent_Programming_in_Scala_by_Prokop_3429063_(z-lib.org).pdf#page=158
     // But that does even guaranty that the underlying libcore thread will be effectively stopped
     onGoingSyncs.remove(accountInfo)
+  }
+
+  private def forceStartSync(account: Account, accountInfo: AccountInfo): Unit = {
+    if (!onGoingSyncs.contains(accountInfo)) {
+      startSync(account, accountInfo, wasForced = true)
+    }
   }
 
   private def tryToSync(account: Account, accountInfo: AccountInfo) = {
@@ -427,16 +430,25 @@ class AccountSynchronizer() extends Actor with ActorLogging {
       log.debug(s"Queued $accountUrl synchronization as ${onGoingSyncs.size} >= ${DaemonConfiguration.Synchronization.maxOnGoing}")
       queue += ((account, accountInfo))
     } else {
-      startSync(account, accountInfo)
+      startSync(account, accountInfo, wasForced = false)
     }
   }
 
-  private def startSync(account: Account, accountInfo: AccountInfo): Unit = {
-    onGoingSyncs += (accountInfo -> sync(account, accountInfo).pipeTo(self))
+  private def startSync(account: Account, accountInfo: AccountInfo, wasForced: Boolean): Unit = {
+    onGoingSyncs += (accountInfo -> sync(account, accountInfo, wasForced))
     watchdog ! SyncStarted(accountInfo)
   }
 
-  private def sync(account: Account, accountInfo: AccountInfo): Future[SyncResult] = {
+  private def handleSyncResult(result: SyncResult): Unit = {
+    watchdog ! result
+    onGoingSyncs.remove(result.accountInfo)
+    if (queue.nonEmpty) {
+      val (account, accountInfo) = queue.dequeue()
+      self ! StartSynchronization(account, accountInfo)
+    }
+  }
+
+  private def sync(account: Account, accountInfo: AccountInfo, wasForced: Boolean): Future[SyncResult] = {
     import co.ledger.wallet.daemon.context.ApplicationContext.IOPool
     val accountUrl: String = s"${accountInfo.poolName}/${accountInfo.walletName}/${account.getIndex}"
 
@@ -445,15 +457,15 @@ class AccountSynchronizer() extends Actor with ActorLogging {
       .map { result =>
         if (result.syncResult) {
           log.info(s"#[${self.path}]Sync : $accountUrl has been synced : $result")
-          SyncSuccess(accountInfo)
+          SyncSuccess(accountInfo, wasForced)
         } else {
           log.error(s"#Sync : $accountUrl has FAILED")
-          SyncFailure(accountInfo, s"#Sync : Lib core failed to sync the account $accountUrl")
+          SyncFailure(accountInfo, s"#Sync : Lib core failed to sync the account $accountUrl", wasForced)
         }
       }(IOPool)
       .recoverWith { case NonFatal(t) =>
         log.error(t, s"#Sync Failed to sync account: $accountUrl")
-        Future.successful(SyncFailure(accountInfo, t.getMessage))
+        Future.successful(SyncFailure(accountInfo, t.getMessage, wasForced))
       }(IOPool)
   }
 }
@@ -489,9 +501,9 @@ object AccountSynchronizer {
     def accountInfo: AccountInfo
   }
 
-  case class SyncSuccess(accountInfo: AccountInfo) extends SyncResult
+  case class SyncSuccess(accountInfo: AccountInfo, wasForced: Boolean) extends SyncResult
 
-  case class SyncFailure(accountInfo: AccountInfo, reason: String) extends SyncResult
+  case class SyncFailure(accountInfo: AccountInfo, reason: String, wasForced: Boolean) extends SyncResult
 
   def name(account: Account, wallet: Wallet, poolName: PoolName): String = AkkaUtils.validActorName("account-synchronizer", poolName.name, wallet.getName, account.getIndex.toString)
 }
