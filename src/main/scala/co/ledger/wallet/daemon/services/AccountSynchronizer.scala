@@ -427,11 +427,11 @@ class AccountSynchronizer() extends Actor with ActorLogging {
     val accountUrl: String = s"${accountInfo.poolName}/${accountInfo.walletName}/${account.getIndex}"
     log.debug(s"Trying to synchronize $accountUrl...")
     if (onGoingSyncs.size >= DaemonConfiguration.Synchronization.maxOnGoing) {
-      log.debug(s"Queued $accountUrl synchronization as OnGoing[${onGoingSyncs.size}] >= Max[${DaemonConfiguration.Synchronization.maxOnGoing}]")
-      log.debug(s"=> [${
-        queue.map { case (acc, info) => s"${info.poolName}/${info.walletName}/${acc.getIndex}" }
-          .mkString(",")
-      }]")
+      log.debug(
+        s"""Queued $accountUrl synchronization as OnGoing[${onGoingSyncs.size}] >= Max[${DaemonConfiguration.Synchronization.maxOnGoing}]
+           |=> [${queue.map { case (acc, info) => s"${info.poolName}/${info.walletName}/${acc.getIndex}" }.mkString(",")}]
+           |""".stripMargin.replaceAll("\n", " ")
+      )
 
       queue += ((account, accountInfo))
     } else {
