@@ -101,11 +101,11 @@ case class ERC20AccountRabbitMQView(
 case object ERC20AccountRabbitMQView {
   def fromAccountViews(accountView: AccountView, erc20AccountView: ERC20FullAccountView): ERC20AccountRabbitMQView = {
     ERC20AccountRabbitMQView(
-      balance = accountView.balance,
+      balance = erc20AccountView.balance,
       currency = ERC20CurrencyRabbitMQView.fromERC20FullAccountView(accountView, erc20AccountView),
-      status = accountView.status,
-      walletName = accountView.walletName,
-      index = accountView.index
+      status = erc20AccountView.status,
+      walletName = erc20AccountView.walletName,
+      index = erc20AccountView.index
     )
   }
 }
@@ -132,7 +132,7 @@ final case class ERC20CurrencyRabbitMQView(
 case object ERC20CurrencyRabbitMQView {
   def fromERC20FullAccountView(accountView: AccountView, ECR20AccountView: ERC20FullAccountView): ERC20CurrencyRabbitMQView = {
     ERC20CurrencyRabbitMQView(
-      name = accountView.currency.name,
+      name = ECR20AccountView.name,
       family = accountView.currency.family,
       contractAddress = ECR20AccountView.contractAddress
     )
