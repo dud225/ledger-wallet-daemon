@@ -93,7 +93,7 @@ class RippleDao(protected val db: Database) extends CoinDao with Logging {
             row.get[String]("recipients").split(','),
             row.get[String]("sender"),
             row.get[String]("receiver"),
-            row.get[String]("value"),
+            BigInt(row.get[String]("value"), 16),
             row.get[Int]("status"),
             BigInt(row.get[String]("sequence")),
             row.getOption[String]("destination_tag").map(BigInt(_)).getOrElse(BigInt(0))
@@ -112,7 +112,7 @@ class RippleDao(protected val db: Database) extends CoinDao with Logging {
 
         val ledgerSequence = pop.blockHeight.toString // it seems it ledgersequence is the block hieght
         val signingPubkey = "" // no use
-        val txView = Some(RippleTransactionView(pop.txHash, pop.fees.toString(), pop.receiver, pop.sender, pop.value,
+        val txView = Some(RippleTransactionView(pop.txHash, pop.fees.toString(), pop.receiver, pop.sender, pop.value.toString(),
           pop.date, pop.status, pop.sequence.toString(), ledgerSequence, signingPubkey,
           opMemos.getOrElse(pop.uid, List.empty[RippleMemoView]),
           pop.destination_tag.longValue()))
@@ -161,7 +161,7 @@ class RippleDao(protected val db: Database) extends CoinDao with Logging {
                              recipients: Seq[String],
                              sender: String,
                              receiver: String,
-                             value: String,
+                             value: BigInt,
                              status: Int,
                              sequence: BigInt,
                              destination_tag: BigInt)
